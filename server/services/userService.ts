@@ -1,168 +1,131 @@
-import { supabase } from './supabase';
+import { db } from '../config/database';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { ValidationError, AuthServiceError } from '../helpers/errors';
 import { LoginResponse, UserCreateRequest } from '../types/types';
+import { BaseService } from './baseService';
 
-export class UserService {
+export class UserService extends BaseService {
     private static readonly SALT_ROUNDS = 10;
     private static readonly JWT_SECRET = process.env.JWT_SECRET || '1234567890abcdef';
     private static readonly JWT_EXPIRES_IN = '7d';
 
-    static async createUser(userData: UserCreateRequest): Promise<LoginResponse> {
-        // Перевіряємо, чи користувач вже існує
-        const { data: existingUser } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', userData.email)
-            .single();
-
-        if (existingUser) {
-            throw new AuthServiceError('User with this email already exists', 409);
-        }
-
-        // Хешуємо пароль
-        const passwordHash = await bcrypt.hash(userData.password, this.SALT_ROUNDS);
-
-        // Створюємо користувача
-        const { data, error } = await supabase
-            .from('users')
-            .insert([{
-                email: userData.email,
-                password_hash: passwordHash
-            }])
-            .select('id, email')
-            .single();
-
-        if (error) {
-            throw new AuthServiceError(`Failed to create user: ${error.message}`, 500, error);
-        }
-
-        // Генеруємо JWT токен
-        const token = jwt.sign(
-            { 
-                userId: data.id, 
-                email: data.email 
-            },
-            this.JWT_SECRET,
-            { expiresIn: this.JWT_EXPIRES_IN }
-        );
-
-        return {
-            token: `Bearer ${token}`,
-            user: {
-                id: data.id,
-                email: data.email
-            }
-        };
+    constructor() {
+        super('users');
     }
 
-    static async loginUser(email: string, password: string): Promise<LoginResponse> {
-        // Знаходимо користувача за email
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('id, email, password_hash')
-            .eq('email', email)
-            .single();
-
-        if (error || !user) {
-            throw new AuthServiceError('Invalid email or password', 401);
-        }
-
-        // Перевіряємо пароль
-        const isValidPassword = await bcrypt.compare(password, user.password_hash);
-        if (!isValidPassword) {
-            throw new AuthServiceError('Invalid email or password', 401);
-        }
-
-        // Генеруємо JWT токен
-        const token = jwt.sign(
-            { 
-                userId: user.id, 
-                email: user.email 
-            },
-            this.JWT_SECRET,
-            { expiresIn: this.JWT_EXPIRES_IN }
-        );
-
-        return {
-            token: `Bearer ${token}`,
-            user: {
-                id: user.id,
-                email: user.email
-            }
-        };
-    }
-
-    static async getUserById(id: string): Promise<{ id: string; email: string } | null> {
-        const { data, error } = await supabase
-            .from('users')
-            .select('id, email')
-            .eq('id', id)
-            .single();
-
-        if (error || !data) {
-            return null;
-        }
-
-        return {
-            id: data.id,
-            email: data.email
-        };
-    }
-
-    static async updateUser(id: string, updateData: { email?: string; password?: string }): Promise<{ id: string; email: string }> {
-        const updates: any = {};
-
-        if (updateData.email) {
-            // Перевіряємо, чи email не зайнятий іншим користувачем
-            const { data: existingUser } = await supabase
-                .from('users')
-                .select('id')
-                .eq('email', updateData.email)
-                .neq('id', id)
-                .single();
+    async createUser(userData: UserCreateRequest): Promise<LoginResponse> {
+        try {
+            const existingUser = await this.executeQuery(
+                this.getQueryBuilder()
+                    .select('id')
+                    .where('email', userData.email)
+                    .first()
+            );
 
             if (existingUser) {
-                throw new AuthServiceError('Email already in use', 409);
+                throw new AuthServiceError('User with this email already exists', 409);
             }
 
-            updates.email = updateData.email;
+            const passwordHash = await bcrypt.hash(userData.password, UserService.SALT_ROUNDS);
+
+            const [user] = await this.executeQuery(
+                this.getQueryBuilder()
+                    .insert({
+                        email: userData.email,
+                        password_hash: passwordHash,
+                        created_at: new Date(),
+                        updated_at: new Date()
+                    })
+                    .returning(['id', 'email'])
+            );
+
+            const token = jwt.sign(
+                { 
+                    userId: user.id, 
+                    email: user.email 
+                },
+                UserService.JWT_SECRET,
+                { expiresIn: UserService.JWT_EXPIRES_IN }
+            );
+
+            return {
+                token,
+                user: {
+                    id: user.id,
+                    email: user.email
+                }
+            };
+        } catch (error: any) {
+            if (error instanceof AuthServiceError) {
+                throw error;
+            }
+            throw new AuthServiceError(`Failed to create user: ${error.message}`, 500, error);
         }
-
-        if (updateData.password) {
-            updates.password_hash = await bcrypt.hash(updateData.password, this.SALT_ROUNDS);
-        }
-
-        if (Object.keys(updates).length === 0) {
-            throw new ValidationError('No data to update');
-        }
-
-        const { data, error } = await supabase
-            .from('users')
-            .update(updates)
-            .eq('id', id)
-            .select('id, email')
-            .single();
-
-        if (error) {
-            throw new AuthServiceError(`Failed to update user: ${error.message}`, 500, error);
-        }
-
-        return {
-            id: data.id,
-            email: data.email
-        };
     }
 
-    static async deleteUser(id: string): Promise<void> {
-        const { error } = await supabase
-            .from('users')
-            .delete()
-            .eq('id', id);
+    async loginUser(email: string, password: string): Promise<LoginResponse> {
+        try {
+            const user = await this.executeQuery(
+                this.getQueryBuilder()
+                    .select('id', 'email', 'password_hash')
+                    .where('email', email)
+                    .first()
+            );
 
-        if (error) {
-            throw new AuthServiceError(`Failed to delete user: ${error.message}`, 500, error);
+            if (!user) {
+                throw new AuthServiceError('Invalid email or password', 401);
+            }
+
+            const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+
+            if (!isPasswordValid) {
+                throw new AuthServiceError('Invalid email or password', 401);
+            }
+
+            const token = jwt.sign(
+                { 
+                    userId: user.id, 
+                    email: user.email 
+                },
+                UserService.JWT_SECRET,
+                { expiresIn: UserService.JWT_EXPIRES_IN }
+            );
+
+            return {
+                token,
+                user: {
+                    id: user.id,
+                    email: user.email
+                }
+            };
+        } catch (error: any) {
+            if (error instanceof AuthServiceError) {
+                throw error;
+            }
+            throw new AuthServiceError(`Login failed: ${error.message}`, 500, error);
+        }
+    }
+
+    async getUserById(id: string) {
+        try {
+            const user = await this.executeQuery(
+                this.getQueryBuilder()
+                    .select('id', 'email', 'created_at', 'updated_at')
+                    .where('id', id)
+                    .first()
+            );
+
+            if (!user) {
+                throw new AuthServiceError('User not found', 404);
+            }
+
+            return user;
+        } catch (error: any) {
+            if (error instanceof AuthServiceError) {
+                throw error;
+            }
+            throw new AuthServiceError(`Failed to get user: ${error.message}`, 500, error);
         }
     }
 }

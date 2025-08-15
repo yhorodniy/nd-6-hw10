@@ -3,6 +3,8 @@ import { PostsService } from '../services/postsService';
 import { AuthenticatedRequest } from '../helpers/auth';
 import { PostCreateRequest, PostUpdateRequest } from '../types/types';
 
+const postsService = new PostsService();
+
 export const getNewsPosts = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
         const page = parseInt(req.query.page as string) || 0;
@@ -15,7 +17,7 @@ export const getNewsPosts = async (req: Request, res: Response, next: NextFuncti
         const authReq = req as AuthenticatedRequest;
         const userId = authReq.user?.id;
 
-        const posts = await PostsService.getAllPosts(page, size, category, userId);
+        const posts = await postsService.getAllPosts(page, size, category, userId);
 
         return res.status(200).json(posts);
     } catch (error) {
@@ -33,7 +35,7 @@ export const getSinglePost = async (req: Request<{ id: string }>, res: Response,
         const authReq = req as AuthenticatedRequest;
         const userId = authReq.user?.id;
 
-        const post = await PostsService.getPostById(id, userId);
+        const post = await postsService.getPostById(id, userId);
         return res.status(200).json(post);
     } catch (error) {
         next(error);
@@ -49,7 +51,7 @@ export const createPost = async (req: Request, res: Response, next: NextFunction
         }
 
         const postData: PostCreateRequest = req.body;
-        const newPost = await PostsService.createPost(postData, authReq.user.id);
+        const newPost = await postsService.createPost(postData, authReq.user.id);
 
         return res.status(201).json(newPost);
     } catch (error) {
@@ -70,7 +72,7 @@ export const updatePost = async (req: Request, res: Response, next: NextFunction
         }
 
         const postData: PostUpdateRequest = req.body;
-        const updatedPost = await PostsService.updatePost(id, postData, authReq.user.id);
+        const updatedPost = await postsService.updatePost(id, postData, authReq.user.id);
 
         return res.status(200).json(updatedPost);
     } catch (error) {
@@ -90,7 +92,7 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
             return res.status(400).json({ error: 'Post ID is required' });
         }
 
-        await PostsService.deletePost(id, authReq.user.id);
+        await postsService.deletePost(id, authReq.user.id);
 
         return res.status(204).send();
     } catch (error) {
@@ -100,7 +102,7 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
 
 export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
-        const categories = await PostsService.getCategories();
+        const categories = await postsService.getCategories();
         return res.status(200).json(categories);
     } catch (error) {
         next(error);

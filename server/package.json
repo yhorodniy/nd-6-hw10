@@ -5,7 +5,16 @@
   "scripts": {
     "dev:server": "nodemon --exec ts-node server.ts",
     "build:server": "tsc",
-    "start:prod": "node dist/server.js"
+    "start:prod": "node dist/server.js",
+    "db:create": "ts-node scripts/createDatabase.ts",
+    "db:migrate": "npm run db:create & ts-node migrations/001_create_tables.ts",
+    "db:demo": "ts-node scripts/loadDemoData.ts",
+    "db:create-table": "ts-node scripts/createTable.ts",
+    "db:get-all": "ts-node scripts/getAll.ts",
+    "db:get-by-id": "ts-node scripts/getById.ts",
+    "db:insert": "ts-node scripts/insert.ts",
+    "db:update": "ts-node scripts/update.ts",
+    "db:delete": "ts-node scripts/delete.ts"
   },
   "repository": {
     "type": "git",
@@ -31,8 +40,8 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.53.0",
     "@types/bcryptjs": "^2.4.6",
+    "@types/pg": "^8.15.5",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
@@ -40,7 +49,9 @@
     "express": "^5.1.0",
     "fastest-validator": "^1.19.1",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
     "nd-6-hw6": "file:..",
+    "pg": "^8.16.3",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
   }

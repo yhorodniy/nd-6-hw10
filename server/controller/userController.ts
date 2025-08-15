@@ -3,7 +3,7 @@ import { UserService } from "../services/userService";
 import { AuthenticatedRequest } from "../helpers/auth";
 import { ValidationError, AuthServiceError } from "../helpers/errors";
 
-
+const userService = new UserService();
 
 export const registerUser = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
@@ -26,7 +26,7 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
             throw new ValidationError('Password must be at least 6 characters long');
         }
 
-        const result = await UserService.createUser({ email, password });
+        const result = await userService.createUser({ email, password });
 
         return res.status(201).json({
             message: 'User created successfully',
@@ -46,7 +46,7 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
             throw new ValidationError('Email and password are required');
         }
 
-        const result = await UserService.loginUser(email, password);
+        const result = await userService.loginUser(email, password);
 
         return res.status(200).json({
             token: result.token,
@@ -64,7 +64,7 @@ export const getUserProfile = async (req: Request, res: Response, next: NextFunc
             throw new AuthServiceError('User not authenticated', 401);
         }
 
-        const user = await UserService.getUserById(authReq.user.id);
+        const user = await userService.getUserById(authReq.user.id);
         if (!user) {
             throw new AuthServiceError('User not found', 404);
         }
